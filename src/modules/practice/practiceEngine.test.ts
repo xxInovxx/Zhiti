@@ -4,7 +4,7 @@ import {
   buildLegacyCaseUnit, buildPracticeUnits, buildSingleQuestionUnit, gradeQuestion, hasSameUnitPool,
   completedPracticeUnitIds, completedPracticeUnits, countAnswerable, cycleProgressNumber, cycleSessionProgressNumber,
   isCycleProgressComplete, isCycleSessionComplete, isGroupReviewSession, reshuffleRemainingUnitIds,
-  selectExamUnits, shouldCompleteGroupReviewOnLeave, shouldShowSingleQuestionResultOnLeave,
+  randomizeChoiceOptions, selectExamUnits, shouldCompleteGroupReviewOnLeave, shouldShowSingleQuestionResultOnLeave,
 } from './practiceEngine'
 
 function question(partial: Partial<Question>): Question {
@@ -170,6 +170,26 @@ describe('刷题引擎', () => {
     const item = question({ answerMode: 'MULTIPLE', normalizedAnswer: 'ACD' })
     expect(gradeQuestion(item, 'D,A,C').correct).toBe(true)
     expect(gradeQuestion(item, 'AC').correct).toBe(false)
+  })
+
+  it('随机模式打乱选项内容但保持显示字母连续且答案键不变', () => {
+    const item = question({
+      answerMode: 'MULTIPLE',
+      normalizedAnswer: 'AC',
+      options: [
+        { key: 'A', text: '甲' },
+        { key: 'B', text: '乙' },
+        { key: 'C', text: '丙' },
+        { key: 'D', text: '丁' },
+      ],
+    })
+
+    const randomized = randomizeChoiceOptions(item, 'session:question')
+
+    expect(randomized.options.map((option) => option.displayKey)).toEqual(['A', 'B', 'C', 'D'])
+    expect(randomized.options.map((option) => option.key)).not.toEqual(['A', 'B', 'C', 'D'])
+    expect(randomized.normalizedAnswer).toBe('AC')
+    expect(randomized.options.map((option) => option.text).sort()).toEqual(['丁', '丙', '乙', '甲'].sort())
   })
 
   it('填空题只在输入与答案完全匹配时判定正确', () => {

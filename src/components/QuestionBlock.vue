@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { LearningState, Question } from '@/domain/models'
-import { questionAnswerIsCorrect, questionCorrectAnswers } from '@/domain/utils'
+import { questionAnswerForDisplay, questionAnswerIsCorrect, questionCorrectAnswers } from '@/domain/utils'
 import FavoriteIcon from './FavoriteIcon.vue'
 
 const props = withDefaults(defineProps<{
@@ -24,10 +24,12 @@ const emit = defineEmits<{
 
 const selected = computed(() => new Set(props.modelValue.split('').filter(Boolean)))
 const ownAnswerCorrect = computed(() => questionAnswerIsCorrect(props.question, props.modelValue))
-const correctAnswerText = computed(() => questionCorrectAnswers(props.question).join(' / '))
-const canCorrectFillAnswer = computed(() => Boolean(
+const ownAnswerText = computed(() => questionAnswerForDisplay(props.question, props.modelValue))
+const correctAnswerText = computed(() => questionCorrectAnswers(props.question)
+  .map((answer) => questionAnswerForDisplay(props.question, answer)).join(' / '))
+const canCorrectAnswer = computed(() => Boolean(
   props.reveal
-  && props.question.answerMode === 'FILL'
+  && props.question.answerMode !== 'NONE'
   && props.modelValue
   && !ownAnswerCorrect.value,
 ))
@@ -97,7 +99,7 @@ function answerModeLabel(): string {
 }
 
 function requestAnswerCorrection(): void {
-  if (!canCorrectFillAnswer.value || !window.confirm('是否确定修正答案？')) return
+  if (!canCorrectAnswer.value || !window.confirm('是否确定修正答案？')) return
   emit('correct-answer', props.modelValue)
 }
 
@@ -115,7 +117,7 @@ function optionClass(key: string): Record<string, boolean> {
     <div class="question-heading">
       <span class="type-chip">{{ answerModeLabel() }}</span>
       <div class="question-heading-actions">
-        <button v-if="canCorrectFillAnswer" type="button" class="correct-answer-button" @click="requestAnswerCorrection">修正答案</button>
+        <button v-if="canCorrectAnswer" type="button" class="correct-answer-button" @click="requestAnswerCorrection">修正答案</button>
         <button
           v-if="showFavorite !== false"
           type="button"
@@ -155,12 +157,12 @@ function optionClass(key: string): Record<string, boolean> {
         :disabled="disabled"
         @click="choose(option.key)"
       >
-        <span class="option-key">{{ option.key }}</span>
+        <span class="option-key">{{ option.displayKey ?? option.key }}</span>
         <span>{{ option.text }}</span>
       </button>
     </div>
     <div v-if="reveal" class="answer-panel">
-      <strong class="answer-line" :class="ownAnswerCorrect ? 'correct-answer' : 'wrong-answer'">你的答案：{{ modelValue || '未作答' }}</strong>
+      <strong class="answer-line" :class="ownAnswerCorrect ? 'correct-answer' : 'wrong-answer'">你的答案：{{ ownAnswerText || '未作答' }}</strong>
       <strong class="answer-line correct-answer">正确答案：{{ correctAnswerText }}</strong>
       <p class="answer-explanation">{{ question.explanation || '暂无解析' }}</p>
     </div>
@@ -182,10 +184,10 @@ function optionClass(key: string): Record<string, boolean> {
 .question-heading-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .correct-answer-button {
   padding: 6px 10px;
-  border: 1px solid #35a66f;
+  border: 1px solid var(--success-border);
   border-radius: 999px;
-  color: #237a50;
-  background: #e5f6ed;
+  color: var(--success);
+  background: var(--success-soft);
   font-size: 12px;
   font-weight: 900;
 }

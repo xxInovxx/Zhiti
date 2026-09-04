@@ -296,7 +296,7 @@ function formatTime(value: string): string {
 .filter-actions button:disabled { opacity: .4; }
 .filter-grid { display: grid; gap: 11px; margin-top: 16px; }
 .filter-grid label > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.filter-grid select { width: 100%; height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 34px 0 12px; color: var(--ink); background: #fbfbf8; font: inherit; outline: none; }
+.filter-grid select { width: 100%; height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 34px 0 12px; color: var(--ink); background: var(--field-bg); font: inherit; outline: none; }
 .filter-grid select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .history-slide { position: relative; overflow: hidden; border-radius: var(--radius); box-shadow: var(--shadow); }
 .history-slide + .history-slide { margin-top: 12px; }

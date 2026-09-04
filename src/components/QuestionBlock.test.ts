@@ -116,4 +116,38 @@ describe('QuestionBlock 收藏按钮', () => {
     await wrapper.setProps({ question: { ...fillQuestion, acceptedAnswers: ['补充答案'] } })
     expect(wrapper.find('.correct-answer-button').exists()).toBe(false)
   })
+
+  it('单选题答错后显示修正答案按钮并提交当前选项', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mount(QuestionBlock, {
+      props: { question, modelValue: 'B', reveal: true, disabled: true },
+    })
+
+    await wrapper.get('.correct-answer-button').trigger('click')
+    expect(window.confirm).toHaveBeenCalledWith('是否确定修正答案？')
+    expect(wrapper.emitted('correct-answer')?.[0]).toEqual(['B'])
+  })
+
+  it('选项打乱后显示连续字母，并用原始键保存和判题', async () => {
+    const shuffledQuestion: Question = {
+      ...question,
+      normalizedAnswer: 'A',
+      options: [
+        { key: 'C', displayKey: 'A', text: '选项 C' },
+        { key: 'A', displayKey: 'B', text: '选项 A' },
+        { key: 'B', displayKey: 'C', text: '选项 B' },
+      ],
+    }
+    const wrapper = mount(QuestionBlock, {
+      props: { question: shuffledQuestion, modelValue: 'C', reveal: true },
+    })
+
+    expect(wrapper.findAll('.option-key').map((item) => item.text())).toEqual(['A', 'B', 'C'])
+    expect(wrapper.text()).toContain('你的答案：A')
+    expect(wrapper.text()).toContain('正确答案：B')
+
+    await wrapper.setProps({ modelValue: '', reveal: false, disabled: false })
+    await wrapper.findAll('.option-row')[0]?.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['C'])
+  })
 })

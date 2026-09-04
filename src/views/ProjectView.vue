@@ -163,7 +163,7 @@ function flash(text: string): void {
 </template>
 
 <style scoped>
-.modal-backdrop { position: fixed; z-index: 50; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(16,30,24,.42); }
+.modal-backdrop { position: fixed; z-index: 50; inset: 0; padding: 20px; display: grid; place-items: center; background: var(--overlay); }
 .modal-card { width: min(100%, 520px); max-height: 85vh; overflow: auto; }
 .overview-card { position: relative; width: 100%; padding-right: 48px; text-align: left; color: var(--ink); }
 .overview-arrow { position: absolute; right: 19px; top: 50%; transform: translateY(-50%); color: var(--primary); font-size: 28px; }

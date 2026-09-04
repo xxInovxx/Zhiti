@@ -1,12 +1,18 @@
 import type { Question } from './models'
-import { questionCorrectAnswers } from './utils'
+import { questionAnswerForDisplay, questionCorrectAnswers } from './utils'
 
 export function formatQuestionsForClipboard(context: Question | null, questions: Question[]): string {
   const lines: string[] = []
   if (context) lines.push(`案例：${context.stem}`)
   questions.forEach((question, index) => {
     if (index > 0) lines.push('')
-    lines.push(`题干：${question.stem}`, `答案：${questionCorrectAnswers(question).join(' / ')}`)
+    const answers = questionCorrectAnswers(question)
+      .map((answer) => questionAnswerForDisplay(question, answer))
+    lines.push(`题干：${question.stem}`)
+    for (const option of question.options) {
+      lines.push(`${option.displayKey ?? option.key}：${option.text}`)
+    }
+    lines.push(`答案：${answers.join(' / ')}`)
   })
   return lines.join('\n')
 }

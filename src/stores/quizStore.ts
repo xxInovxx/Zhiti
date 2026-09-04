@@ -4,13 +4,14 @@ import type {
   AppSnapshot, ExamConfig, LearningState, ModeProgress, PracticeMode, PracticeSession,
   PracticeScope, PracticeUnit, ProjectStats, Question, QuizProject, SourceFile,
 } from '@/domain/models'
-import { createId, seededShuffle, shuffle } from '@/domain/utils'
+import { createId, shuffle } from '@/domain/utils'
+import { isReservedProjectName } from '@/domain/projectNames'
 import { repository } from '@/infrastructure/database'
 import { IMPORT_QUESTION_TYPES, questionImportType, type ImportQuestionType, type ParsedWorkbook } from '@/modules/import/importTypes'
-import { buildFillAnswerCorrection } from '@/modules/practice/fillAnswerCorrection'
+import { buildAnswerCorrection } from '@/modules/practice/fillAnswerCorrection'
 import {
   buildLegacyCaseUnit, buildPracticeUnits, buildSingleQuestionUnit, gradeQuestion, hasSameUnitPool,
-  completedPracticeUnitIds, completedPracticeUnits, reshuffleRemainingUnitIds, selectExamUnits,
+  completedPracticeUnitIds, completedPracticeUnits, randomizeChoiceOptions, reshuffleRemainingUnitIds, selectExamUnits,
 } from '@/modules/practice/practiceEngine'
 
 function blankLearning(questionId: string): LearningState {
@@ -27,7 +28,7 @@ function blankProgress(projectId: string): ModeProgress {
 
 export const useQuizStore = defineStore('quiz', () => {
   const data = reactive<AppSnapshot>({
-    schemaVersion: 1, settings: { splitCaseQuestions: true, randomKeepOptionOrder: true, totalPracticeDurationMs: 0, totalPracticeCount: 0, projectOrder: [] },
+    schemaVersion: 1, settings: { splitCaseQuestions: true, randomKeepOptionOrder: true, themeMode: 'SYSTEM', totalPracticeDurationMs: 0, totalPracticeCount: 0, projectPracticeCounts: {}, projectOrder: [] },
     sources: [], questions: [], projects: [], learningStates: [], sessions: [], modeProgress: [],
   })
   const ready = ref(false)
@@ -56,8 +57,11 @@ export const useQuizStore = defineStore('quiz', () => {
     data.schemaVersion = snapshot.schemaVersion
     data.settings.splitCaseQuestions = snapshot.settings?.splitCaseQuestions !== false
     data.settings.randomKeepOptionOrder = snapshot.settings?.randomKeepOptionOrder !== false
+    data.settings.themeMode = ['LIGHT', 'DARK', 'SYSTEM'].includes(snapshot.settings?.themeMode ?? '')
+      ? snapshot.settings.themeMode : 'SYSTEM'
     data.settings.totalPracticeDurationMs = Math.max(0, snapshot.settings?.totalPracticeDurationMs ?? 0)
     data.settings.totalPracticeCount = Math.max(0, snapshot.settings?.totalPracticeCount ?? 0)
+    data.settings.projectPracticeCounts = { ...(snapshot.settings?.projectPracticeCounts ?? {}) }
     const snapshotOrder = Array.isArray(snapshot.settings?.projectOrder) ? snapshot.settings.projectOrder : []
     const projectIds = new Set(snapshot.projects.map((project) => project.id))
     const projectOrder = [
@@ -119,6 +123,7 @@ export const useQuizStore = defineStore('quiz', () => {
       sourceIds: [...input.sourceIds], createdAt: existing?.createdAt ?? now, updatedAt: now,
     }
     if (!project.name) throw new Error('请输入项目名称')
+    if (isReservedProjectName(project.name)) throw new Error('项目名称不能与统计中心的默认重练名称相同')
     if (!project.sourceIds.length) throw new Error('请至少选择一个 XLSX 题库')
     await repository.saveProject(project)
     const index = data.projects.findIndex((item) => item.id === project.id)
@@ -135,6 +140,9 @@ export const useQuizStore = defineStore('quiz', () => {
     data.projects.splice(0, data.projects.length, ...data.projects.filter((project) => project.id !== projectId))
     data.sessions.splice(0, data.sessions.length, ...data.sessions.filter((session) => session.projectId !== projectId))
     data.modeProgress.splice(0, data.modeProgress.length, ...data.modeProgress.filter((progress) => progress.projectId !== projectId))
+    const projectPracticeCounts = { ...(data.settings.projectPracticeCounts ?? {}) }
+    delete projectPracticeCounts[projectId]
+    data.settings.projectPracticeCounts = projectPracticeCounts
     await persistProjectOrder(data.projects.map((project) => project.id))
   }
 
@@ -289,12 +297,7 @@ export const useQuizStore = defineStore('quiz', () => {
     const ordered = session.randomizeOptions
       ? resolved.map((unit) => ({
         ...unit,
-        questions: unit.questions.map((question) => ({
-          ...question,
-          options: ['SINGLE', 'MULTIPLE'].includes(question.answerMode) && question.options.length > 1
-            ? seededShuffle(question.options, `${session.id}:${question.id}`)
-            : question.options,
-        })),
+        questions: unit.questions.map((question) => randomizeChoiceOptions(question, `${session.id}:${question.id}`)),
       }))
       : resolved
     if (session.status === 'COMPLETED' && ['ORDERED', 'RANDOM_CYCLE'].includes(session.mode)) {
@@ -373,15 +376,49 @@ export const useQuizStore = defineStore('quiz', () => {
   async function finishSession(session: PracticeSession): Promise<void> {
     if (session.status === 'COMPLETED') return
     const units = getSessionUnits(session)
-    for (const unit of units) await gradeUnit(session, unit)
+    if (session.mode === 'EXAM') await gradeExamUnits(session, units)
+    else for (const unit of units) await gradeUnit(session, unit)
     const completedSession: PracticeSession = {
       ...session,
       status: 'COMPLETED',
       completedAt: new Date().toISOString(),
     }
     await repository.saveSession(completedSession)
-    await recordCompletedPractice(completedSession.durationMs)
+    await recordCompletedPractice(completedSession.durationMs, completedSession.projectId)
     Object.assign(session, completedSession)
+  }
+
+  async function gradeExamUnits(session: PracticeSession, units: PracticeUnit[]): Promise<void> {
+    const graded = new Set(session.gradedQuestionIds)
+    const newlyGradedIds: string[] = []
+    const learningStates: LearningState[] = []
+    let correctCount = session.correctCount
+    let wrongCount = session.wrongCount
+    let unansweredCount = session.unansweredCount
+
+    for (const question of units.flatMap((unit) => unit.questions)) {
+      if (graded.has(question.id)) continue
+      const selected = session.answers[question.id] ?? ''
+      const result = gradeQuestion(question, selected)
+      if (!result.unanswered) {
+        learningStates.push(buildLearningState(
+          question.id, selected, result.correct, false, session.mode,
+          session.questionDurationMs[question.id] ?? 0,
+        ))
+      }
+      graded.add(question.id)
+      newlyGradedIds.push(question.id)
+      if (result.correct) correctCount += 1
+      else if (result.unanswered) unansweredCount += 1
+      else wrongCount += 1
+    }
+
+    await repository.saveLearningStates(learningStates)
+    applyLearningStates(learningStates)
+    session.gradedQuestionIds.push(...newlyGradedIds)
+    session.correctCount = correctCount
+    session.wrongCount = wrongCount
+    session.unansweredCount = unansweredCount
   }
 
   async function finishPartialPracticeSession(session: PracticeSession): Promise<boolean> {
@@ -406,28 +443,41 @@ export const useQuizStore = defineStore('quiz', () => {
       completedAt: new Date().toISOString(),
     }
     await repository.saveSession(summarizedSession)
-    await recordCompletedPractice(summarizedSession.durationMs)
+    await recordCompletedPractice(summarizedSession.durationMs, summarizedSession.projectId)
     Object.assign(session, summarizedSession)
     return true
   }
 
-  async function recordCompletedPractice(durationMs: number): Promise<void> {
+  async function recordCompletedPractice(durationMs: number, projectId: string | null): Promise<void> {
+    const projectPracticeCounts = { ...(data.settings.projectPracticeCounts ?? {}) }
+    if (projectId) projectPracticeCounts[projectId] = (projectPracticeCounts[projectId] ?? 0) + 1
     const settings = {
       ...data.settings,
       totalPracticeDurationMs: data.settings.totalPracticeDurationMs + Math.max(0, durationMs),
       totalPracticeCount: data.settings.totalPracticeCount + 1,
+      projectPracticeCounts,
     }
     await repository.saveSettings(settings)
     data.settings.totalPracticeDurationMs = settings.totalPracticeDurationMs
     data.settings.totalPracticeCount = settings.totalPracticeCount
+    data.settings.projectPracticeCounts = settings.projectPracticeCounts
   }
 
   async function recordLearning(
     questionId: string, selected: string, correct: boolean, unanswered: boolean, mode: PracticeMode,
     durationMs: number,
   ): Promise<void> {
+    const state = buildLearningState(questionId, selected, correct, unanswered, mode, durationMs)
+    await repository.saveLearningState(state)
+    applyLearningState(state)
+  }
+
+  function buildLearningState(
+    questionId: string, selected: string, correct: boolean, unanswered: boolean, mode: PracticeMode,
+    durationMs: number,
+  ): LearningState {
     const current = learningMap.value.get(questionId) ?? blankLearning(questionId)
-    const state: LearningState = {
+    return {
       ...current,
       attemptCount: current.attemptCount + 1,
       correctCount: current.correctCount + Number(correct),
@@ -439,10 +489,25 @@ export const useQuizStore = defineStore('quiz', () => {
       lastAnsweredAt: new Date().toISOString(),
       totalDurationMs: current.totalDurationMs + Math.max(0, durationMs),
     }
-    await repository.saveLearningState(state)
-    const index = data.learningStates.findIndex((item) => item.questionId === questionId)
+  }
+
+  function applyLearningState(state: LearningState): void {
+    const index = data.learningStates.findIndex((item) => item.questionId === state.questionId)
     if (index >= 0) data.learningStates[index] = state
     else data.learningStates.push(state)
+  }
+
+  function applyLearningStates(states: LearningState[]): void {
+    const indexes = new Map(data.learningStates.map((state, index) => [state.questionId, index]))
+    for (const state of states) {
+      const index = indexes.get(state.questionId)
+      if (index === undefined) {
+        indexes.set(state.questionId, data.learningStates.length)
+        data.learningStates.push(state)
+      } else {
+        data.learningStates[index] = state
+      }
+    }
   }
 
   async function toggleFavorite(questionId: string): Promise<void> {
@@ -463,12 +528,12 @@ export const useQuizStore = defineStore('quiz', () => {
     else data.learningStates.push(state)
   }
 
-  async function correctFillAnswer(questionId: string, answer: string): Promise<number> {
+  async function correctAnswer(questionId: string, answer: string): Promise<number> {
     const question = data.questions.find((item) => item.id === questionId)
     if (!question) throw new Error('找不到该题目')
     const currentLearning = learningMap.value.get(questionId) ?? blankLearning(questionId)
-    const correction = buildFillAnswerCorrection(question, answer, currentLearning, data.sessions)
-    await repository.applyFillAnswerCorrection(correction.question, correction.learningState, correction.sessions)
+    const correction = buildAnswerCorrection(question, answer, currentLearning, data.sessions)
+    await repository.applyAnswerCorrection(correction.question, correction.learningState, correction.sessions)
 
     const questionIndex = data.questions.findIndex((item) => item.id === questionId)
     if (questionIndex >= 0) Object.assign(data.questions[questionIndex] as Question, correction.question)
@@ -493,6 +558,12 @@ export const useQuizStore = defineStore('quiz', () => {
     const settings = { ...data.settings, randomKeepOptionOrder: value }
     await repository.saveSettings(settings)
     data.settings.randomKeepOptionOrder = value
+  }
+
+  async function setThemeMode(value: 'LIGHT' | 'DARK' | 'SYSTEM'): Promise<void> {
+    const settings = { ...data.settings, themeMode: value }
+    await repository.saveSettings(settings)
+    data.settings.themeMode = value
   }
 
   async function advanceProgress(session: PracticeSession): Promise<void> {
@@ -555,7 +626,7 @@ export const useQuizStore = defineStore('quiz', () => {
     init, importWorkbook, updateSourceSelection, deleteSource, saveProject, deleteProject, reorderProjects, getProjectQuestions, getProjectUnits, getScopedProjectUnits,
     startPractice, startGlobalReview, startSingleQuestion, getSessionUnits, saveSession, deleteSessions, restartCycleSession, gradeUnit, finishSession,
     finishPartialPracticeSession,
-    toggleFavorite, saveQuestionNote, correctFillAnswer, setSplitCaseQuestions, setRandomKeepOptionOrder, getProjectStats, calculateStats, restoreSnapshot, exportSnapshot,
+    toggleFavorite, saveQuestionNote, correctAnswer, setSplitCaseQuestions, setRandomKeepOptionOrder, setThemeMode, getProjectStats, calculateStats, restoreSnapshot, exportSnapshot,
   }
 })
 

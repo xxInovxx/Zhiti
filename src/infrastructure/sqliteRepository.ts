@@ -104,8 +104,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   split_case_questions INTEGER NOT NULL,
   random_keep_option_order INTEGER NOT NULL DEFAULT 1,
+  theme_mode TEXT NOT NULL DEFAULT 'SYSTEM',
   cumulative_practice_duration_ms INTEGER NOT NULL DEFAULT 0,
   cumulative_practice_count INTEGER NOT NULL DEFAULT 0,
+  project_practice_counts_json TEXT NOT NULL DEFAULT '{}',
   project_order_json TEXT NOT NULL DEFAULT '[]'
 );
 INSERT OR IGNORE INTO app_settings (id, split_case_questions) VALUES (1, 1);
@@ -135,20 +137,26 @@ export class SqliteRepository implements QuizRepository {
     await this.ensureSessionEntryKindColumn()
     await this.ensureSessionRandomizeOptionsColumn()
     await this.ensureRandomKeepOptionOrderColumn()
+    await this.ensureThemeModeColumn()
     await this.ensureCumulativePracticeDurationColumn()
     await this.ensureCumulativePracticeCountColumn()
+    await this.ensureProjectPracticeCountsColumn()
     await this.ensureProjectOrderColumn()
   }
 
   async getSnapshot(): Promise<AppSnapshot> {
     const db = this.requireDb()
     const snapshot = emptySnapshot()
-    const settingsRows = (await db.query('SELECT split_case_questions, random_keep_option_order, cumulative_practice_duration_ms, cumulative_practice_count, project_order_json FROM app_settings WHERE id = 1')).values ?? []
+    const settingsRows = (await db.query('SELECT split_case_questions, random_keep_option_order, theme_mode, cumulative_practice_duration_ms, cumulative_practice_count, project_practice_counts_json, project_order_json FROM app_settings WHERE id = 1')).values ?? []
     snapshot.settings = {
       splitCaseQuestions: settingsRows[0]?.split_case_questions !== 0,
       randomKeepOptionOrder: settingsRows[0]?.random_keep_option_order !== 0,
+      themeMode: ['LIGHT', 'DARK', 'SYSTEM'].includes(settingsRows[0]?.theme_mode)
+        ? settingsRows[0].theme_mode : 'SYSTEM',
       totalPracticeDurationMs: Math.max(0, settingsRows[0]?.cumulative_practice_duration_ms ?? 0),
       totalPracticeCount: Math.max(0, settingsRows[0]?.cumulative_practice_count ?? 0),
+      projectPracticeCounts: settingsRows[0]?.project_practice_counts_json
+        ? JSON.parse(settingsRows[0].project_practice_counts_json) : {},
       projectOrder: settingsRows[0]?.project_order_json ? JSON.parse(settingsRows[0].project_order_json) : [],
     }
     const sourceRows = (await db.query('SELECT * FROM source_files ORDER BY imported_at DESC')).values ?? []
@@ -291,12 +299,35 @@ export class SqliteRepository implements QuizRepository {
     ])
   }
 
-  async applyFillAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void> {
+  async saveLearningStates(states: LearningState[]): Promise<void> {
+    if (!states.length) return
+    const statement = `INSERT INTO learning_states (
+      question_id, attempt_count, correct_count, wrong_count, unanswered_count,
+      is_wrong_active, is_favorite, last_answer, last_result, last_answered_at,
+      total_duration_ms, note_text
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(question_id) DO UPDATE SET attempt_count=excluded.attempt_count, correct_count=excluded.correct_count,
+      wrong_count=excluded.wrong_count, unanswered_count=excluded.unanswered_count,
+      is_wrong_active=excluded.is_wrong_active, is_favorite=excluded.is_favorite,
+      last_answer=excluded.last_answer, last_result=excluded.last_result,
+      last_answered_at=excluded.last_answered_at, total_duration_ms=excluded.total_duration_ms,
+      note_text=excluded.note_text`
+    await this.requireDb().executeSet(states.map((state) => ({
+      statement,
+      values: [
+        state.questionId, state.attemptCount, state.correctCount, state.wrongCount, state.unansweredCount,
+        Number(state.isWrongActive), Number(state.isFavorite), state.lastAnswer, state.lastResult,
+        state.lastAnsweredAt, state.totalDurationMs, state.note,
+      ],
+    })), true)
+  }
+
+  async applyAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void> {
     const db = this.requireDb()
     await db.beginTransaction()
     try {
-      await db.run('UPDATE questions SET accepted_answers_json = ? WHERE id = ?', [
-        JSON.stringify(question.acceptedAnswers), question.id,
+      await db.run('UPDATE questions SET normalized_answer = ?, accepted_answers_json = ? WHERE id = ?', [
+        question.normalizedAnswer, JSON.stringify(question.acceptedAnswers), question.id,
       ], false)
       await db.run(`INSERT INTO learning_states (
         question_id, attempt_count, correct_count, wrong_count, unanswered_count,
@@ -365,15 +396,17 @@ export class SqliteRepository implements QuizRepository {
 
   async saveSettings(settings: AppSettings): Promise<void> {
     await this.requireDb().run(`INSERT INTO app_settings (
-      id, split_case_questions, random_keep_option_order, cumulative_practice_duration_ms, cumulative_practice_count, project_order_json
-    ) VALUES (1, ?, ?, ?, ?, ?)
+      id, split_case_questions, random_keep_option_order, theme_mode, cumulative_practice_duration_ms, cumulative_practice_count, project_practice_counts_json, project_order_json
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET split_case_questions=excluded.split_case_questions,
       random_keep_option_order=excluded.random_keep_option_order,
+      theme_mode=excluded.theme_mode,
       cumulative_practice_duration_ms=excluded.cumulative_practice_duration_ms,
       cumulative_practice_count=excluded.cumulative_practice_count,
+      project_practice_counts_json=excluded.project_practice_counts_json,
       project_order_json=excluded.project_order_json`, [
-      Number(settings.splitCaseQuestions), Number(settings.randomKeepOptionOrder !== false), Math.max(0, settings.totalPracticeDurationMs),
-      Math.max(0, Math.floor(settings.totalPracticeCount)), JSON.stringify(settings.projectOrder),
+      Number(settings.splitCaseQuestions), Number(settings.randomKeepOptionOrder !== false), settings.themeMode ?? 'SYSTEM', Math.max(0, settings.totalPracticeDurationMs),
+      Math.max(0, Math.floor(settings.totalPracticeCount)), JSON.stringify(settings.projectPracticeCounts ?? {}), JSON.stringify(settings.projectOrder),
     ])
   }
 
@@ -472,6 +505,14 @@ export class SqliteRepository implements QuizRepository {
     }
   }
 
+  private async ensureThemeModeColumn(): Promise<void> {
+    const db = this.requireDb()
+    const columns = (await db.query('PRAGMA table_info(app_settings)')).values ?? []
+    if (!columns.some((column) => column.name === 'theme_mode')) {
+      await db.execute("ALTER TABLE app_settings ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'SYSTEM';")
+    }
+  }
+
   private async ensureCumulativePracticeDurationColumn(): Promise<void> {
     const db = this.requireDb()
     const columns = (await db.query('PRAGMA table_info(app_settings)')).values ?? []
@@ -494,6 +535,17 @@ export class SqliteRepository implements QuizRepository {
         SELECT COUNT(*) FROM practice_sessions WHERE status = 'COMPLETED'
       )
       WHERE id = 1;`)
+  }
+
+  private async ensureProjectPracticeCountsColumn(): Promise<void> {
+    const db = this.requireDb()
+    const columns = (await db.query('PRAGMA table_info(app_settings)')).values ?? []
+    if (columns.some((column) => column.name === 'project_practice_counts_json')) return
+    await db.execute("ALTER TABLE app_settings ADD COLUMN project_practice_counts_json TEXT NOT NULL DEFAULT '{}';")
+    const rows = (await db.query(`SELECT project_id, COUNT(*) AS practice_count
+      FROM practice_sessions WHERE status = 'COMPLETED' AND project_id IS NOT NULL GROUP BY project_id`)).values ?? []
+    const counts = Object.fromEntries(rows.map((row) => [row.project_id, Math.max(0, row.practice_count ?? 0)]))
+    await db.run('UPDATE app_settings SET project_practice_counts_json = ? WHERE id = 1', [JSON.stringify(counts)])
   }
 
   private async ensureProjectOrderColumn(): Promise<void> {

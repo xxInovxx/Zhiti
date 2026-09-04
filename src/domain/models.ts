@@ -4,10 +4,13 @@ export type PracticeMode = 'EXAM' | 'RANDOM_CYCLE' | 'ORDERED' | 'WRONG_REVIEW' 
 export type PracticeEntryKind = 'STANDARD' | 'SINGLE_QUESTION'
 export type PracticeScope = 'ALL' | 'HISTORICAL_WRONG'
 export type SessionStatus = 'ACTIVE' | 'COMPLETED'
+export type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM'
 
 export interface QuestionOption {
   key: string
   text: string
+  /** Ephemeral label used when random modes shuffle option contents. */
+  displayKey?: string
 }
 
 export interface Question {
@@ -127,8 +130,12 @@ export interface AppSettings {
   splitCaseQuestions: boolean
   /** Enabled by default: random modes keep the original option order. */
   randomKeepOptionOrder?: boolean
+  /** Application color scheme. Older backups without this field follow the system. */
+  themeMode?: ThemeMode
   totalPracticeDurationMs: number
   totalPracticeCount: number
+  /** Cumulative completed practice count per project, independent of removable history rows. */
+  projectPracticeCounts?: Record<string, number>
   projectOrder: string[]
 }
 

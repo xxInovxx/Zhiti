@@ -9,8 +9,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#F7F5EF',
+      overlaysWebView: false,
     },
   },
 }

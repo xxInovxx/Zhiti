@@ -4,6 +4,19 @@ import { emptySnapshot, normalizeSnapshot } from './repository'
 import { WebRepository } from './webRepository'
 
 describe('应用设置兼容', () => {
+  it('可批量保存多道题的学习状态', async () => {
+    const repository = new WebRepository()
+    const state = {
+      questionId: 'q1', attemptCount: 1, correctCount: 1, wrongCount: 0, unansweredCount: 0,
+      isWrongActive: false, isFavorite: false, note: '', lastAnswer: 'A', lastResult: 'CORRECT' as const,
+      lastAnsweredAt: null, totalDurationMs: 1000,
+    }
+
+    await repository.saveLearningStates([state, { ...state, questionId: 'q2', lastAnswer: 'B' }])
+
+    expect((await repository.getSnapshot()).learningStates.map((item) => item.questionId)).toEqual(['q1', 'q2'])
+  })
+
   it('停用题型只隐藏题目并保留学习记录，重新启用后可恢复', async () => {
     const repository = new WebRepository()
     const source = { id: 'source-1', name: '题库.xlsx', sha256: 'hash-1', importedAt: '', sheets: [], questionCount: 1, caseCount: 0 }
@@ -54,6 +67,18 @@ describe('应用设置兼容', () => {
     const legacy = emptySnapshot() as AppSnapshot & { settings?: AppSnapshot['settings'] }
     delete legacy.settings
     expect(normalizeSnapshot(legacy as AppSnapshot).settings.splitCaseQuestions).toBe(true)
+  })
+
+  it('旧版备份没有颜色设置时默认跟随系统', () => {
+    const snapshot = emptySnapshot()
+    delete (snapshot.settings as Partial<typeof snapshot.settings>).themeMode
+    expect(normalizeSnapshot(snapshot).settings.themeMode).toBe('SYSTEM')
+  })
+
+  it('保留备份中的暗色设置', () => {
+    const snapshot = emptySnapshot()
+    snapshot.settings.themeMode = 'DARK'
+    expect(normalizeSnapshot(snapshot).settings.themeMode).toBe('DARK')
   })
 
   it('旧版备份中的学习状态自动补充空备注', () => {
@@ -140,6 +165,22 @@ describe('应用设置兼容', () => {
     expect(normalizeSnapshot(snapshot).settings.totalPracticeCount).toBe(2)
   })
 
+  it('旧版设置没有项目练习次数时由现有项目历史初始化', () => {
+    const snapshot = emptySnapshot()
+    snapshot.projects.push({
+      id: 'project-1', name: '项目', description: '', createdAt: '', updatedAt: '', sourceIds: [],
+    })
+    snapshot.sessions.push({
+      id: 'completed', projectId: 'project-1', mode: 'ORDERED', entryKind: 'STANDARD', status: 'COMPLETED',
+      unitIds: ['q1'], currentIndex: 0, answers: { q1: 'A' }, gradedQuestionIds: ['q1'],
+      startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:01:00.000Z', deadline: null,
+      correctCount: 1, wrongCount: 0, unansweredCount: 0, durationMs: 60_000, questionDurationMs: {}, config: null,
+    })
+    delete (snapshot.settings as Partial<typeof snapshot.settings>).projectPracticeCounts
+
+    expect(normalizeSnapshot(snapshot).settings.projectPracticeCounts).toEqual({ 'project-1': 1 })
+  })
+
   it('保留独立累计刷题时长，不随历史记录数量变化', () => {
     const snapshot = emptySnapshot()
     snapshot.settings.totalPracticeDurationMs = 180_000
@@ -151,7 +192,10 @@ describe('应用设置兼容', () => {
 
   it('清除学习历史不会扣减独立累计刷题时长', async () => {
     const repository = new WebRepository()
-    await repository.saveSettings({ splitCaseQuestions: true, totalPracticeDurationMs: 120_000, totalPracticeCount: 3, projectOrder: [] })
+    await repository.saveSettings({
+      splitCaseQuestions: true, totalPracticeDurationMs: 120_000, totalPracticeCount: 3,
+      projectPracticeCounts: { project: 2 }, projectOrder: [],
+    })
     await repository.saveSession({
       id: 'completed', projectId: null, mode: 'WRONG_REVIEW', entryKind: 'STANDARD', status: 'COMPLETED',
       unitIds: ['q1'], currentIndex: 0, answers: { q1: 'A' }, gradedQuestionIds: ['q1'],
@@ -166,5 +210,6 @@ describe('应用设置兼容', () => {
     expect(snapshot.sessions).toEqual([])
     expect(snapshot.settings.totalPracticeDurationMs).toBe(120_000)
     expect(snapshot.settings.totalPracticeCount).toBe(3)
+    expect(snapshot.settings.projectPracticeCounts).toEqual({ project: 2 })
   })
 })

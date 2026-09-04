@@ -6,13 +6,19 @@ import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import AppHeader from '@/components/AppHeader.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { useQuizStore } from '@/stores/quizStore'
-import type { AppSnapshot } from '@/domain/models'
+import type { AppSnapshot, ThemeMode } from '@/domain/models'
 
 const store = useQuizStore()
 const message = ref('')
 const restoring = ref(false)
 const savingSetting = ref(false)
+const themeOptions = [
+  { value: 'LIGHT', label: '亮色', icon: 'sun' },
+  { value: 'DARK', label: '暗色', icon: 'moon' },
+  { value: 'SYSTEM', label: '跟随系统', icon: 'system' },
+] as const
 
 async function backup(): Promise<void> {
   let cachePath: string | null = null
@@ -75,6 +81,28 @@ async function changeCaseSplit(event: Event): Promise<void> {
   } finally { savingSetting.value = false }
 }
 
+async function changeRandomKeepOptionOrder(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  savingSetting.value = true
+  try {
+    await store.setRandomKeepOptionOrder(input.checked)
+    flash(input.checked ? '随机模式将保持原选项顺序' : '随机模式将打乱单选、多选选项')
+  } catch (error) {
+    input.checked = store.data.settings.randomKeepOptionOrder !== false
+    flash(`设置保存失败：${(error as Error).message}`)
+  } finally { savingSetting.value = false }
+}
+
+async function changeThemeMode(themeMode: ThemeMode): Promise<void> {
+  if (themeMode === store.data.settings.themeMode || savingSetting.value) return
+  savingSetting.value = true
+  try {
+    await store.setThemeMode(themeMode)
+  } catch (error) {
+    flash(`主题设置保存失败：${(error as Error).message}`)
+  } finally { savingSetting.value = false }
+}
+
 function flash(text: string): void {
   message.value = text
   window.setTimeout(() => { message.value = '' }, 2600)
@@ -86,6 +114,25 @@ function flash(text: string): void {
     <AppHeader title="设置" subtitle="所有数据保存在本地" />
     <IonContent :fullscreen="true">
       <main class="page-content">
+        <div class="section-heading"><h2>主题模式</h2><span>全局生效</span></div>
+        <section class="card theme-setting-card">
+          <div class="theme-picker" role="radiogroup" aria-label="主题模式">
+            <button
+              v-for="option in themeOptions"
+              :key="option.value"
+              type="button"
+              class="theme-option"
+              :class="{ active: (store.data.settings.themeMode ?? 'SYSTEM') === option.value }"
+              :disabled="savingSetting"
+              :aria-checked="(store.data.settings.themeMode ?? 'SYSTEM') === option.value"
+              role="radio"
+              @click="changeThemeMode(option.value)"
+            >
+              <span class="theme-option-icon"><AppIcon :name="option.icon" /></span>
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+        </section>
         <div class="section-heading"><h2>刷题设置</h2><span>全局生效</span></div>
         <label class="card global-setting-card">
           <span class="setting-copy">
@@ -99,6 +146,22 @@ function flash(text: string): void {
               :disabled="savingSetting"
               aria-label="案例题小题拆分"
               @change="changeCaseSplit"
+            />
+            <i aria-hidden="true"></i>
+          </span>
+        </label>
+        <label class="card global-setting-card">
+          <span class="setting-copy">
+            <strong>随机不打乱选项</strong>
+            <small>默认开启；关闭后仅随机刷题和随机组卷会打乱单选题、多选题的选项。</small>
+          </span>
+          <span class="switch-control">
+            <input
+              type="checkbox"
+              :checked="store.data.settings.randomKeepOptionOrder !== false"
+              :disabled="savingSetting"
+              aria-label="随机不打乱选项"
+              @change="changeRandomKeepOptionOrder"
             />
             <i aria-hidden="true"></i>
           </span>
@@ -126,7 +189,7 @@ function flash(text: string): void {
 
         <div class="section-heading"><h2>关于</h2></div>
         <section class="card about-card">
-            <h3>知题 1.0.0</h3>
+            <h3>知题 1.1.0</h3>
           <p>Vue + Ionic + Capacitor 构建的离线刷题应用。</p>
           <div class="author-row">
             <span>作者</span>
@@ -164,15 +227,25 @@ function flash(text: string): void {
 </template>
 
 <style scoped>
+.theme-setting-card { padding: 7px; }
+.theme-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.theme-option { min-width: 0; min-height: 78px; padding: 10px 5px; border: 0; border-radius: 13px; display: grid; place-content: center; justify-items: center; gap: 7px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 800; transition: color .2s ease, background .2s ease, transform .2s ease; }
+.theme-option-icon { width: 31px; height: 31px; display: grid; place-items: center; }
+.theme-option-icon :deep(.app-icon) { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.theme-option.active { color: var(--primary); background: var(--primary-soft); }
+.theme-option:active { transform: scale(.96); }
+.theme-option:focus-visible { outline: 3px solid var(--primary-soft); outline-offset: 1px; }
+.theme-option:disabled { opacity: .65; }
 .global-setting-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.global-setting-card + .global-setting-card { margin-top: 12px; }
 .setting-copy { min-width: 0; }
 .setting-copy strong, .setting-copy small { display: block; }
 .setting-copy strong { font-size: 15px; }
 .setting-copy small { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .switch-control { position: relative; width: 52px; height: 30px; flex: 0 0 auto; }
 .switch-control input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.switch-control i { position: absolute; inset: 0; border-radius: 99px; background: #c9cfcc; transition: .2s ease; }
-.switch-control i::after { content: ''; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; border-radius: 50%; background: white; box-shadow: 0 2px 7px rgba(0,0,0,.18); transition: .2s ease; }
+.switch-control i { position: absolute; inset: 0; border-radius: 99px; background: var(--track-bg); border: 1px solid var(--line); transition: .2s ease; }
+.switch-control i::after { content: ''; position: absolute; width: 24px; height: 24px; left: 2px; top: 2px; border-radius: 50%; background: var(--paper); box-shadow: 0 2px 7px rgba(0,0,0,.18); transition: .2s ease; }
 .switch-control input:checked + i { background: var(--primary); }
 .switch-control input:checked + i::after { transform: translateX(22px); }
 .switch-control input:focus-visible + i { box-shadow: 0 0 0 3px var(--primary-soft); }

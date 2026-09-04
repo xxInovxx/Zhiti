@@ -268,8 +268,10 @@ async function finish(timeout: boolean): Promise<void> {
     stopTiming()
     await store.finishSession(session.value)
     isLeaving.value = true
+    allowRouteLeave = true
     await router.replace(`/result/${session.value.id}`)
   } catch (error) {
+    allowRouteLeave = false
     isLeaving.value = false
     throw error
   } finally { busy.value = false }
@@ -285,12 +287,12 @@ async function saveNote(questionId: string, note: string): Promise<void> {
   } catch (error) { flash(`备注保存失败：${(error as Error).message}`) }
 }
 
-async function correctFillAnswer(questionId: string, answer: string): Promise<void> {
+async function correctAnswer(questionId: string, answer: string): Promise<void> {
   if (busy.value) return
   busy.value = true
   try {
-    await store.correctFillAnswer(questionId, answer)
-    flash('答案已修正并加入正确答案')
+    await store.correctAnswer(questionId, answer)
+    flash('答案已修正')
   } catch (error) {
     flash(`答案修正失败：${(error as Error).message}`)
   } finally {
@@ -416,7 +418,7 @@ function flash(text: string): void {
           :show-favorite="true"
           @update:model-value="session.answers[question.id] = $event"
           @favorite="toggleFavorite(question.id)"
-          @correct-answer="correctFillAnswer(question.id, $event)"
+          @correct-answer="correctAnswer(question.id, $event)"
           @save-note="saveNote(question.id, $event)"
           @change="persistAnswer"
         />
@@ -473,7 +475,7 @@ function flash(text: string): void {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(16, 30, 24, .46);
+  background: var(--overlay);
 }
 .preview-card { width: min(100%, 560px); max-height: 82vh; overflow: auto; }
 .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -486,13 +488,13 @@ function flash(text: string): void {
   border: 0;
   border-radius: 50%;
   color: white;
-  background: #a7afac;
+  background: var(--preview-idle);
   font-weight: 900;
 }
 .preview-number.answered { background: #3478c7; }
 .preview-number.current { box-shadow: 0 0 0 3px white, 0 0 0 5px var(--accent); }
 .preview-legend { display: flex; justify-content: center; gap: 22px; color: var(--muted); font-size: 12px; }
 .preview-legend span { display: flex; align-items: center; gap: 6px; }
-.preview-legend i { width: 12px; height: 12px; border-radius: 50%; background: #a7afac; }
+.preview-legend i { width: 12px; height: 12px; border-radius: 50%; background: var(--preview-idle); }
 .preview-legend i.answered { background: #3478c7; }
 </style>

@@ -73,8 +73,8 @@ async function correctSelectedAnswer(answer: string): Promise<void> {
   if (!selectedItem.value) return
   const questionId = selectedItem.value.question.id
   try {
-    await store.correctFillAnswer(questionId, answer)
-    flash('答案已修正并加入正确答案')
+    await store.correctAnswer(questionId, answer)
+    flash('答案已修正')
     if (reviewScope === 'WRONG') {
       if (!activeReviewItems.value.length) await router.back()
       else selectedIndex.value = Math.min(selectedIndex.value, activeReviewItems.value.length - 1)
@@ -145,7 +145,7 @@ function flash(text: string): void {
 .review-page { min-height: calc(100vh - 72px); max-width: 820px; margin: 0 auto; padding: 18px 18px calc(28px + var(--safe-bottom)); touch-action: pan-y; }
 .review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .review-status { padding: 7px 11px; border-radius: 999px; font-size: 12px; font-weight: 900; }
-.review-status.correct { color: #237a50; background: #e5f6ed; }
+.review-status.correct { color: var(--success); background: var(--success-soft); }
 .review-status.wrong { color: var(--danger); background: var(--danger-soft); }
 .review-navigation { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-top: 16px; }
 .review-navigation button:last-child { justify-self: stretch; }

@@ -1,5 +1,22 @@
 import type { AnswerMode, ExamConfig, PracticeSession, PracticeUnit, Question } from '@/domain/models'
-import { questionAnswerIsCorrect, shuffle } from '@/domain/utils'
+import { questionAnswerIsCorrect, seededShuffle, shuffle } from '@/domain/utils'
+
+const DISPLAY_ANSWER_KEYS = 'ABCDEFGHI'
+
+export function randomizeChoiceOptions(question: Question, seed: string): Question {
+  if (!['SINGLE', 'MULTIPLE'].includes(question.answerMode) || question.options.length <= 1) return question
+  const shuffled = seededShuffle(question.options, seed)
+  if (shuffled.every((option, index) => option.key === question.options[index]?.key)) {
+    shuffled.push(shuffled.shift() as Question['options'][number])
+  }
+  return {
+    ...question,
+    options: shuffled.map((option, index) => ({
+      ...option,
+      displayKey: DISPLAY_ANSWER_KEYS[index] ?? option.key,
+    })),
+  }
+}
 
 export function buildPracticeUnits(questions: Question[], splitCaseQuestions = true): PracticeUnit[] {
   const questionMap = new Map(questions.map((question) => [question.id, question]))

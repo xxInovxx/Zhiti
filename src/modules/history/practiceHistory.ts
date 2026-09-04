@@ -17,9 +17,9 @@ export interface PracticeHistoryFilters {
 }
 
 function fallbackName(session: PracticeSession): string {
-  if (session.mode === 'WRONG_REVIEW') return '学习中心 · 错题重练'
-  if (session.mode === 'FAVORITE_REVIEW') return '学习中心 · 收藏重练'
-  if (session.mode === 'NOTE_REVIEW') return '学习中心 · 备注重练'
+  if (session.mode === 'WRONG_REVIEW') return '统计中心 · 错题重练'
+  if (session.mode === 'FAVORITE_REVIEW') return '统计中心 · 收藏重练'
+  if (session.mode === 'NOTE_REVIEW') return '统计中心 · 备注重练'
   return session.projectId ? '已删除项目' : '专项练习'
 }
 

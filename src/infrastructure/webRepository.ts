@@ -64,7 +64,12 @@ export class WebRepository implements QuizRepository {
     this.persist()
   }
 
-  async applyFillAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void> {
+  async saveLearningStates(states: LearningState[]): Promise<void> {
+    states.forEach((state) => this.upsert(this.data.learningStates, state, 'questionId'))
+    if (states.length) this.persist()
+  }
+
+  async applyAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void> {
     this.upsert(this.data.questions, question)
     this.upsert(this.data.learningStates, state, 'questionId')
     sessions.forEach((session) => this.upsert(this.data.sessions, session))

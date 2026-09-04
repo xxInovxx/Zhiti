@@ -66,13 +66,13 @@ describe('学习历史', () => {
     const [row] = buildPracticeHistory([
       session({ projectId: null, mode: 'WRONG_REVIEW' }),
     ], [])
-    expect(row && practiceHistoryProjectKey(row)).toBe('special:学习中心 · 错题重练')
+    expect(row && practiceHistoryProjectKey(row)).toBe('special:统计中心 · 错题重练')
   })
 
   it('正确显示备注重练的模式名称', () => {
     expect(practiceModeLabel('NOTE_REVIEW')).toBe('备注重练')
     const [row] = buildPracticeHistory([session({ projectId: null, mode: 'NOTE_REVIEW' })], [])
-    expect(row?.projectName).toBe('学习中心 · 备注重练')
+    expect(row?.projectName).toBe('统计中心 · 备注重练')
   })
 
   it('支持筛选近 5 天的记录', () => {

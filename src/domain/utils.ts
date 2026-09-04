@@ -80,6 +80,12 @@ export function questionCorrectAnswers(question: Question): string[] {
     .filter((answer, index, answers) => Boolean(answer) && answers.indexOf(answer) === index)
 }
 
+export function questionAnswerForDisplay(question: Question, answer: string): string {
+  if (!['SINGLE', 'MULTIPLE'].includes(question.answerMode)) return answer
+  const displayKeys = new Map(question.options.map((option) => [option.key, option.displayKey ?? option.key]))
+  return [...new Set(answer.split('').map((key) => displayKeys.get(key) ?? key))].sort().join('')
+}
+
 export function questionAnswerIsCorrect(question: Question, answer: string): boolean {
   return Boolean(answer && questionCorrectAnswers(question)
     .some((correctAnswer) => answersEqual(answer, correctAnswer, question.answerMode)))

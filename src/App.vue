@@ -5,6 +5,7 @@ import { IonApp, IonRouterOutlet } from '@ionic/vue'
 import { useRoute } from 'vue-router'
 import BottomNav from '@/components/BottomNav.vue'
 import { useQuizStore } from '@/stores/quizStore'
+import { applyThemeMode, normalizeThemeMode } from '@/theme'
 
 const store = useQuizStore()
 const route = useRoute()
@@ -51,6 +52,13 @@ onBeforeUnmount(() => {
   resetExitHint()
 })
 watch(() => route.path, resetExitHint)
+watch(
+  [() => store.ready, () => store.data.settings.themeMode],
+  ([ready, themeMode]) => {
+    if (ready) applyThemeMode(normalizeThemeMode(themeMode))
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

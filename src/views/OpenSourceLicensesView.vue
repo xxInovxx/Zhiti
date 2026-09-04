@@ -57,7 +57,7 @@ import thirdPartyNotices from '../../THIRD_PARTY_NOTICES.md?raw'
 .license-intro { display: flex; gap: 15px; align-items: flex-start; }
 .license-intro h2 { margin: 1px 0 7px; font-size: 18px; }
 .license-mark { width: 48px; height: 48px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 15px; color: var(--primary); background: var(--primary-soft); font-size: 15px; font-weight: 900; }
-.license-list { overflow: hidden; border: 1px solid rgba(0,0,0,.04); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }
+.license-list { overflow: hidden; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }
 .license-component + .license-component { border-top: 1px solid var(--line); }
 .license-component summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 66px; padding: 13px 16px; cursor: pointer; list-style: none; }
 .license-component summary::-webkit-details-marker { display: none; }
@@ -71,5 +71,5 @@ import thirdPartyNotices from '../../THIRD_PARTY_NOTICES.md?raw'
 .license-component-body .copyright-notice { color: var(--ink); white-space: pre-wrap; }
 .license-component-body a { color: var(--primary); font-size: 12px; font-weight: 800; }
 .complete-notices summary { cursor: pointer; color: var(--primary); font-size: 14px; font-weight: 800; }
-.complete-notices pre { margin: 18px 0 0; padding-top: 18px; border-top: 1px solid var(--line); color: #3f4a45; font: 11px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.complete-notices pre { margin: 18px 0 0; padding-top: 18px; border-top: 1px solid var(--line); color: var(--review-code-ink); font: 11px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

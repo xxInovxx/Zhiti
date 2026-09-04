@@ -19,7 +19,8 @@ export interface QuizRepository {
   saveProject(project: QuizProject): Promise<void>
   deleteProject(projectId: string): Promise<void>
   saveLearningState(state: LearningState): Promise<void>
-  applyFillAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void>
+  saveLearningStates(states: LearningState[]): Promise<void>
+  applyAnswerCorrection(question: Question, state: LearningState, sessions: PracticeSession[]): Promise<void>
   saveSession(session: PracticeSession): Promise<void>
   deleteSessions(sessionIds: string[]): Promise<void>
   saveModeProgress(progress: ModeProgress): Promise<void>
@@ -30,8 +31,10 @@ export interface QuizRepository {
 export const DEFAULT_SETTINGS: AppSettings = {
   splitCaseQuestions: true,
   randomKeepOptionOrder: true,
+  themeMode: 'SYSTEM',
   totalPracticeDurationMs: 0,
   totalPracticeCount: 0,
+  projectPracticeCounts: {},
   projectOrder: [],
 }
 
@@ -71,6 +74,19 @@ export function normalizeSnapshot(snapshot: AppSnapshot): AppSnapshot {
     ...savedProjectOrder.filter((id, index) => projectIds.has(id) && savedProjectOrder.indexOf(id) === index),
     ...snapshot.projects.map((project) => project.id).filter((id) => !savedProjectOrder.includes(id)),
   ]
+  const savedProjectPracticeCounts = legacySettings?.projectPracticeCounts
+  const hasSavedProjectPracticeCounts = Boolean(savedProjectPracticeCounts
+    && typeof savedProjectPracticeCounts === 'object' && !Array.isArray(savedProjectPracticeCounts))
+  const projectPracticeCounts = hasSavedProjectPracticeCounts
+    ? Object.fromEntries(Object.entries(savedProjectPracticeCounts as Record<string, number>)
+      .filter(([projectId, count]) => projectIds.has(projectId) && Number.isFinite(count))
+      .map(([projectId, count]) => [projectId, Math.max(0, Math.floor(count))]))
+    : normalizedSessions.reduce<Record<string, number>>((counts, session) => {
+      if (session.status === 'COMPLETED' && session.projectId && projectIds.has(session.projectId)) {
+        counts[session.projectId] = (counts[session.projectId] ?? 0) + 1
+      }
+      return counts
+    }, {})
   return {
     ...snapshot,
     sources: normalizedSources,
@@ -88,12 +104,15 @@ export function normalizeSnapshot(snapshot: AppSnapshot): AppSnapshot {
     settings: {
       splitCaseQuestions: legacySettings?.splitCaseQuestions !== false,
       randomKeepOptionOrder: legacySettings?.randomKeepOptionOrder !== false,
+      themeMode: ['LIGHT', 'DARK', 'SYSTEM'].includes(legacySettings?.themeMode ?? '')
+        ? legacySettings?.themeMode : 'SYSTEM',
       totalPracticeDurationMs: Number.isFinite(legacySettings?.totalPracticeDurationMs)
         ? Math.max(0, legacySettings?.totalPracticeDurationMs as number)
         : legacyDuration,
       totalPracticeCount: Number.isFinite(legacySettings?.totalPracticeCount)
         ? Math.max(0, Math.floor(legacySettings?.totalPracticeCount as number))
         : legacyPracticeCount,
+      projectPracticeCounts,
       projectOrder,
     },
   }

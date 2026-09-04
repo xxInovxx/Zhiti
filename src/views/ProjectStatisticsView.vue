@@ -94,8 +94,8 @@ async function saveSelectedNote(note: string): Promise<void> {
 async function correctSelectedAnswer(answer: string): Promise<void> {
   if (!selectedRow.value) return
   try {
-    await store.correctFillAnswer(selectedRow.value.question.id, answer)
-    flash('答案已修正并加入正确答案')
+    await store.correctAnswer(selectedRow.value.question.id, answer)
+    flash('答案已修正')
   } catch (error) {
     flash(`答案修正失败：${(error as Error).message}`)
   }
@@ -205,7 +205,7 @@ function flash(text: string): void {
 .detail-summary { grid-template-columns: repeat(3, 1fr); }
 .sort-toolbar { display: flex; align-items: end; gap: 12px; margin-bottom: 14px; }
 .sort-field { flex: 1; margin: 0; }
-.sort-field select { width: 100%; height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 38px 0 13px; color: var(--ink); background: #fbfbf8; }
+.sort-field select { width: 100%; height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 38px 0 13px; color: var(--ink); background: var(--field-bg); }
 .direction-button { flex: 0 0 92px; }
 .question-stat-card { position: relative; cursor: pointer; outline: none; }
 .question-stat-card:focus-visible { box-shadow: 0 0 0 3px var(--primary-soft), var(--shadow); }
@@ -218,7 +218,7 @@ function flash(text: string): void {
 .question-stat-values strong { display: block; color: var(--primary); font: 21px Georgia, serif; }
 .question-stat-values span { color: var(--muted); font-size: 11px; }
 .detail-link { display: block; margin-top: 12px; color: var(--primary); text-align: right; font-size: 12px; font-weight: 800; }
-.detail-backdrop { position: fixed; z-index: 100; inset: 0; padding: calc(18px + env(safe-area-inset-top, 0px)) 18px calc(18px + var(--safe-bottom)); display: grid; place-items: center; background: rgba(16, 30, 24, .46); }
+.detail-backdrop { position: fixed; z-index: 100; inset: 0; padding: calc(18px + env(safe-area-inset-top, 0px)) 18px calc(18px + var(--safe-bottom)); display: grid; place-items: center; background: var(--overlay); }
 .detail-modal { width: min(100%, 620px); max-height: 88vh; overflow: auto; padding: 18px; border-radius: 22px; background: var(--app-bg); box-shadow: 0 18px 50px rgba(16, 30, 24, .22); }
 .detail-modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .detail-modal-heading h2 { margin: 0; font-size: 20px; }

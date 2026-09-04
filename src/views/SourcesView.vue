@@ -267,7 +267,7 @@ function flash(text: string): void {
 </template>
 
 <style scoped>
-.modal-backdrop { position: fixed; z-index: 50; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(16,30,24,.42); }
+.modal-backdrop { position: fixed; z-index: 50; inset: 0; padding: 20px; display: grid; place-items: center; background: var(--overlay); }
 .modal-card { width: min(100%, 520px); max-height: 85vh; overflow: auto; }
 .source-slide { position: relative; overflow: hidden; border-radius: var(--radius); box-shadow: var(--shadow); }
 .source-slide + .source-slide { margin-top: 12px; }
